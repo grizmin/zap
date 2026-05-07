@@ -371,6 +371,14 @@ pub struct DiffStateModel {
     metadata: Option<DiffMetadata>,
     computing_diffs_abort_handle: Option<SpawnedFutureHandle>,
     computing_metadata_abort_handle: Option<SpawnedFutureHandle>,
+    /// Handle for the in-flight `gh pr view` lookup started by `refresh_pr_info`.
+    refreshing_pr_info_handle: Option<SpawnedFutureHandle>,
+    /// Branch name for which `refresh_pr_info` has been called at least once.
+    /// Gates the metadata-refresh fallback so it only retries `gh pr view` once
+    /// per branch when `pr_info` is `None` (e.g. branch has no PR, lookup
+    /// failed). Without this, every filesystem event on the repo would re-fire
+    /// `gh pr view` for branches that legitimately have no PR.
+    pr_info_attempted_for_branch: Option<String>,
     /// Controls whether periodic throttled metadata refresh is active.
     /// Refresh is suppressed when the code review pane is not open.
     metadata_refresh_enabled: bool,
@@ -417,6 +425,8 @@ impl DiffStateModel {
             metadata: None,
             computing_diffs_abort_handle: None,
             computing_metadata_abort_handle: None,
+            refreshing_pr_info_handle: None,
+            pr_info_attempted_for_branch: None,
             metadata_refresh_enabled: false,
         };
 
@@ -575,6 +585,11 @@ impl DiffStateModel {
         self.metadata
             .as_ref()
             .and_then(|metadata| metadata.pr_info.as_ref())
+    }
+
+    /// Whether PR info for the current branch is currently being refreshed.
+    pub fn is_pr_info_refreshing(&self) -> bool {
+        self.refreshing_pr_info_handle.is_some()
     }
 
     /// Checks if git operations like stash or reset would be blocked due to repository state.
@@ -1519,9 +1534,16 @@ impl DiffStateModel {
             if FeatureFlag::GitOperationsInCodeReview.is_enabled() {
                 self.refresh_pr_info(ctx);
             }
-        } else if FeatureFlag::GitOperationsInCodeReview.is_enabled() && self.pr_info().is_none() {
-            // No cached PR info yet — check once so the button updates
-            // after an external push or PR creation.
+        } else if FeatureFlag::GitOperationsInCodeReview.is_enabled()
+            && self.pr_info().is_none()
+            && !self.is_pr_info_refreshing()
+            && self.pr_info_attempted_for_branch != current_branch
+        {
+            // Initial-load fallback: if metadata arrived without a successful
+            // PR lookup yet on this branch, try once. Gated by
+            // `pr_info_attempted_for_branch` so subsequent metadata refreshes
+            // (every fs event on the repo) don't re-fire `gh pr view` when the
+            // branch has no PR or the lookup failed.
             self.refresh_pr_info(ctx);
         }
 
@@ -2885,9 +2907,16 @@ impl DiffStateModel {
     /// Call this on branch change or after push — not on every metadata refresh.
     #[cfg(feature = "local_fs")]
     pub fn refresh_pr_info(&mut self, ctx: &mut ModelContext<Self>) {
+        if let Some(handle) = self.refreshing_pr_info_handle.take() {
+            handle.abort();
+        }
         let Some(repo_path) = self.active_repository_path(ctx) else {
             return;
         };
+        // Mark this branch as attempted before spawning so the fallback in
+        // `handle_updated_metadata_for_repo` won't re-fire while the lookup
+        // is in flight or after it completes with no PR.
+        self.pr_info_attempted_for_branch = self.get_current_branch_name();
         #[cfg(feature = "local_tty")]
         let path_future = LocalShellState::handle(ctx).update(ctx, |shell_state, ctx| {
             shell_state.get_interactive_path_env_var(ctx)
@@ -2897,7 +2926,7 @@ impl DiffStateModel {
             use futures::FutureExt;
             futures::future::ready(None).boxed()
         };
-        ctx.spawn(
+        let handle = ctx.spawn(
             async move {
                 let path_env = path_future.await;
                 get_pr_for_branch(&repo_path, path_env.as_deref())
@@ -2905,6 +2934,7 @@ impl DiffStateModel {
                     .unwrap_or(None)
             },
             |me, pr_info, ctx| {
+                me.refreshing_pr_info_handle = None;
                 if let Some(metadata) = &mut me.metadata {
                     metadata.pr_info = pr_info;
                     ctx.emit(DiffStateModelEvent::DiffMetadataChanged(
@@ -2913,6 +2943,7 @@ impl DiffStateModel {
                 }
             },
         );
+        self.refreshing_pr_info_handle = Some(handle);
     }
 
     #[cfg(not(feature = "local_fs"))]
@@ -3008,6 +3039,27 @@ impl RepositorySubscriber for DiffStateModelRepositorySubscriber {
             };
             let _ = tx.send(msg).await;
         })
+    }
+}
+
+#[cfg(test)]
+impl DiffStateModel {
+    /// Test-only constructor that creates a bare model without a repository.
+    pub fn new_for_test(_ctx: &mut ModelContext<Self>) -> Self {
+        Self {
+            #[cfg(feature = "local_fs")]
+            repository: None,
+            state: InternalDiffState::default(),
+            #[cfg(feature = "local_fs")]
+            subscriber_id: None,
+            mode: DiffMode::default(),
+            metadata: None,
+            computing_diffs_abort_handle: None,
+            computing_metadata_abort_handle: None,
+            refreshing_pr_info_handle: None,
+            pr_info_attempted_for_branch: None,
+            metadata_refresh_enabled: false,
+        }
     }
 }
 
