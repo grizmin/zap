@@ -1314,10 +1314,25 @@ impl EventLoop {
 
                 let event_text = event.text.as_ref().map(|text| text.to_string());
                 let event_state = event.state;
+                let is_unidentified_key =
+                    matches!(event.logical_key, keyboard::Key::Unidentified(_));
                 let modifiers = window_state.modifiers;
                 let Some(warp_ui_event) =
                     convert_keyboard_input_event(event, window_state, is_synthetic)
                 else {
+                    // Fallback for WM_CHAR messages injected by non-IME input methods
+                    // (e.g. Unikey/EVKey on Windows for Vietnamese Telex/VNI). These input
+                    // methods hook the keyboard at a low level and inject pre-composed
+                    // characters via `SendInput` instead of going through the standard IME
+                    // pipeline. The resulting key event has
+                    // `logical_key == Key::Unidentified(...)`, so no keystroke can be
+                    // recovered from it and the characters are dispatched as-is.
+                    if is_unidentified_key && !is_synthetic && event_state == ElementState::Pressed
+                    {
+                        return event_text
+                            .map(|chars| ConvertedEvent::Event(TypedCharacters { chars }));
+                    }
+
                     return text_fallback_event_for_unconverted_key(
                         event_text,
                         event_state,
