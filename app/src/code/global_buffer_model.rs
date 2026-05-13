@@ -368,7 +368,9 @@ impl GlobalBufferModel {
     /// Once we finish reading the file's content from the disk, populate the buffer with the content.
     /// For initial load (is_loaded_from_file_system == true), this is synchronous.
     /// For auto-reload (is_loaded_from_file_system == false), this spawns a background task for diff computation.
-    fn populate_buffer_with_read_content(
+    /// Exposed as `pub(crate)` so tests can populate buffer content
+    /// without going through the async `FileModel` load path.
+    pub(crate) fn populate_buffer_with_read_content(
         &mut self,
         file_id: FileId,
         content: &str,
@@ -1284,6 +1286,15 @@ impl GlobalBufferModel {
     /// client version is updated. Returns `true` if accepted, `false` if rejected
     /// (stale edit — silently discarded, per `BufferEdit` proto spec).
     ///
+    /// **Coordinate convention:** Each `TextEdit` in `edits` uses sequential
+    /// coordinates — its offsets reference the buffer state *after* all
+    /// preceding edits in the slice have been applied. This matches how the
+    /// client constructs edits from `PreciseDelta.replaced_range`, which is
+    /// resolved via anchors in intermediate buffer states. Edits are therefore
+    /// applied one at a time rather than in a single batch call to
+    /// `insert_at_char_offset_ranges` (which expects all offsets in the
+    /// original-buffer coordinate space).
+    ///
     /// V0 limitation (single-client per buffer):
     /// this intentionally does NOT emit `ServerLocalBufferUpdated`. That event
     /// would broadcast the edit to every other connection that has the buffer
@@ -1329,31 +1340,33 @@ impl GlobalBufferModel {
             return false;
         };
 
-        // Wire offsets are 1-indexed (matching CharOffset), so no conversion needed.
-        let new_version = ContentVersion::new();
+        // Apply each edit sequentially: offsets are in sequential coordinates
+        // (each relative to the buffer after all preceding edits), so we must
+        // apply one at a time and recompute max_offset for each.
         buffer.update(ctx, |buffer, ctx| {
-            let max_offset = buffer.max_charoffset();
-            // wire offset 饱和转换 + clamp 到 buffer 末尾,双重防御。
-            let char_edits: Vec<(std::ops::Range<CharOffset>, String)> = edits
-                .iter()
-                .map(|edit| {
-                    let start = CharOffset::from(
-                        usize::try_from(edit.start_offset)
-                            .unwrap_or(usize::MAX)
-                            .min(max_offset.as_usize()),
-                    );
-                    let end = CharOffset::from(
-                        usize::try_from(edit.end_offset)
-                            .unwrap_or(usize::MAX)
-                            .min(max_offset.as_usize()),
-                    );
-                    (start..end, edit.text.clone())
-                })
-                .collect();
-
-            buffer.insert_at_char_offset_ranges(char_edits, new_version, ctx);
+            for edit in edits {
+                let max_offset = buffer.max_charoffset();
+                // wire offset 饱和转换 + clamp 到 buffer 末尾,双重防御。
+                let start = CharOffset::from(
+                    usize::try_from(edit.start_offset)
+                        .unwrap_or(usize::MAX)
+                        .min(max_offset.as_usize()),
+                );
+                let end = CharOffset::from(
+                    usize::try_from(edit.end_offset)
+                        .unwrap_or(usize::MAX)
+                        .min(max_offset.as_usize()),
+                );
+                buffer.insert_at_char_offset_ranges(
+                    vec![(start..end, edit.text.clone())],
+                    ContentVersion::new(),
+                    ctx,
+                );
+            }
+            // Allocate the final version after all per-edit versions so the
+            // monotonic ContentVersion counter moves forward.
+            buffer.set_version(ContentVersion::new());
         });
-
         true
     }
 
@@ -1538,3 +1551,57 @@ impl Entity for GlobalBufferModel {
 }
 
 impl SingletonEntity for GlobalBufferModel {}
+
+#[cfg(test)]
+#[path = "buffer_location_test.rs"]
+mod buffer_location_test;
+
+#[cfg(test)]
+impl GlobalBufferModel {
+    /// Test-only: seeds a Remote buffer with the given content and sync clock,
+    /// bypassing `open_remote_buffer` (which requires `RemoteServerManager`).
+    /// `pub(crate)` because it's used by both `buffer_location_test` and
+    /// future remote-buffer regression tests.
+    pub(crate) fn seed_remote_buffer_for_test(
+        &mut self,
+        host_id: warp_core::HostId,
+        path: warp_util::standardized_path::StandardizedPath,
+        content: &str,
+        server_version: u64,
+        ctx: &mut ModelContext<Self>,
+    ) -> BufferState {
+        use super::buffer_location::RemotePath;
+
+        let remote_path = RemotePath::new(host_id, path);
+        let location = BufferLocation::Remote(remote_path.clone());
+        let file_id = FileId::new();
+        let buffer = ctx.add_model(|_| Buffer::default());
+        let version = ContentVersion::new();
+        buffer.update(ctx, |buf, ctx| {
+            buf.replace_all(content, ctx);
+            buf.set_version(version);
+        });
+        self.location_to_id.insert(location, file_id);
+        self.buffers.insert(
+            file_id,
+            InternalBufferState {
+                buffer: buffer.downgrade(),
+                pending_diff_parse: None,
+                source: BufferSource::Remote {
+                    remote_path,
+                    sync_clock: Some(SyncClock::from_wire(server_version, 0)),
+                },
+            },
+        );
+        BufferState::new(file_id, buffer)
+    }
+
+    /// Test-only: returns the `SyncClock` for a Remote buffer.
+    pub(crate) fn sync_clock_for_remote_test(&self, file_id: FileId) -> Option<&SyncClock> {
+        let state = self.buffers.get(&file_id)?;
+        match &state.source {
+            BufferSource::Remote { sync_clock, .. } => sync_clock.as_ref(),
+            _ => None,
+        }
+    }
+}
