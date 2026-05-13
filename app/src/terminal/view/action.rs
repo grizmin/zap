@@ -397,7 +397,10 @@ pub enum TerminalAction {
     ToggleSessionRecording,
     /// Open the rich input editor for composing a prompt to send to a CLI agent.
     /// Triggered by Ctrl-G when a CLI agent is detected, or from the footer button.
-    OpenCLIAgentRichInput,
+OpenCLIAgentRichInput,
+
+    /// Allow the blocked clipboard operation by adjusting the OSC 52 clipboard access setting.
+    Osc52AllowBlockedClipboardOperation,
 }
 
 // Manually implementing Debug to avoid leaking sensitive information in logs
@@ -645,7 +648,10 @@ impl fmt::Debug for TerminalAction {
             ToggleUsageFooter => write!(f, "ToggleUsageFooter"),
             RevealChildAgent { .. } => write!(f, "RevealChildAgent"),
             ToggleSessionRecording => write!(f, "ToggleSessionRecording"),
-            OpenCLIAgentRichInput => write!(f, "OpenCLIAgentRichInput"),
+OpenCLIAgentRichInput => write!(f, "OpenCLIAgentRichInput"),
+            Osc52AllowBlockedClipboardOperation => {
+                write!(f, "Osc52AllowBlockedClipboardOperation")
+            }
         }
     }
 }
