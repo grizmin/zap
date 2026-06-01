@@ -18330,6 +18330,10 @@ impl Workspace {
                 .insert(flags::EXTRA_META_KEYS_RIGHT_CONTEXT_FLAG);
         }
 
+        if *reporting_setings.mouse_reporting_enabled.value() {
+            context.set.insert(flags::MOUSE_REPORTING_CONTEXT_FLAG);
+        }
+
         if *reporting_setings.scroll_reporting_enabled.value() {
             context.set.insert(flags::SCROLL_REPORTING_CONTEXT_FLAG);
         }

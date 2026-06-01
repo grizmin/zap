@@ -2166,6 +2166,7 @@ toggle-suffix-left-option-meta = 左 Option キーを Meta として扱う
 toggle-suffix-left-alt-meta = 左 Alt キーを Meta として扱う
 toggle-suffix-right-option-meta = 右 Option キーを Meta として扱う
 toggle-suffix-right-alt-meta = 右 Alt キーを Meta として扱う
+toggle-suffix-mouse-reporting = マウスレポート
 toggle-suffix-scroll-reporting = スクロールレポート
 toggle-suffix-completions-while-typing = 入力中の補完
 toggle-suffix-command-corrections = コマンド訂正
