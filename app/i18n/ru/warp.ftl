@@ -2268,6 +2268,7 @@ toggle-suffix-left-option-meta = левую клавишу Option как Meta
 toggle-suffix-left-alt-meta = левую клавишу Alt как Meta
 toggle-suffix-right-option-meta = правую клавишу Option как Meta
 toggle-suffix-right-alt-meta = правую клавишу Alt как Meta
+toggle-suffix-mouse-reporting = отчеты о мыши
 toggle-suffix-scroll-reporting = отчеты о прокрутке
 toggle-suffix-completions-while-typing = автодополнение во время ввода
 toggle-suffix-command-corrections = исправление команд
