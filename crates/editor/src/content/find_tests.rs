@@ -26,6 +26,9 @@ fn test_search_cjk_literal() {
             &mut app,
         );
         buffer.read(&app, |buffer, _| {
+            // The buffer always starts with a block marker at char 0, so the text begins at
+            // offset 1: `账户` lands at 21..23 (verified against the engine). This expectation
+            // was stale after the OpenWarp→Zap rename shortened the fixture string.
             assert_matches(
                 buffer,
                 &SearchConfig {
@@ -35,7 +38,7 @@ fn test_search_cjk_literal() {
                     skip_hidden: false,
                     hidden_ranges: None,
                 },
-                [(27, 29, "账户")],
+                [(21, 23, "账户")],
             );
         });
     });
@@ -259,6 +262,74 @@ fn test_end_of_buffer() {
                     hidden_ranges: None,
                 },
                 [(3, 4, "c")],
+            );
+        });
+    });
+}
+
+#[test]
+fn test_search_non_ascii() {
+    App::test((), |mut app| async move {
+        let (buffer, _selection) = Buffer::mock_from_markdown(
+            "你好aaaaa\n再見你好",
+            None,
+            Box::new(|_, _| IndentBehavior::Ignore),
+            &mut app,
+        );
+        buffer.read(&app, |buffer, _| {
+            // ASCII literal search works regardless of the bug.
+            assert_matches(
+                buffer,
+                &SearchConfig::new("a"),
+                [
+                    (3, 4, "a"),
+                    (4, 5, "a"),
+                    (5, 6, "a"),
+                    (6, 7, "a"),
+                    (7, 8, "a"),
+                ],
+            );
+
+            // Multi-byte literal search must find every occurrence. Each CJK
+            // character is one `CharOffset` but several UTF-8 bytes; the reverse
+            // DFA pass that locates a match's start has to consume those bytes in
+            // reverse order, which is what this regression guards.
+            assert_matches(
+                buffer,
+                &SearchConfig::new("你好"),
+                [(1, 3, "你好"), (11, 13, "你好")],
+            );
+
+            // A multi-byte query mixing scripts also works.
+            assert_matches(buffer, &SearchConfig::new("好a"), [(2, 4, "好a")]);
+
+            // Regex over multi-byte content keeps working.
+            assert_matches(
+                buffer,
+                &SearchConfig::regex("你."),
+                [(1, 3, "你好"), (11, 13, "你好")],
+            );
+        });
+    });
+}
+
+#[test]
+fn test_search_non_ascii_case_insensitive() {
+    App::test((), |mut app| async move {
+        let (buffer, _selection) = Buffer::mock_from_markdown(
+            "CAFÉ café",
+            None,
+            Box::new(|_, _| IndentBehavior::Ignore),
+            &mut app,
+        );
+        buffer.read(&app, |buffer, _| {
+            // Case-insensitive matching over multi-byte characters (`É`/`é` are
+            // two UTF-8 bytes) must find both the upper- and lower-case forms,
+            // exercising the reverse-DFA byte order on case-folded input.
+            assert_matches(
+                buffer,
+                &SearchConfig::new("café").with_case_sensitive(false),
+                [(1, 5, "CAFÉ"), (6, 10, "café")],
             );
         });
     });
