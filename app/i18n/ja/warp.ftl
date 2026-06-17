@@ -1150,6 +1150,8 @@ settings-code-project-explorer = プロジェクトエクスプローラー
 settings-code-project-explorer-desc = 左側ツールパネルに IDE スタイルのプロジェクトエクスプローラー / ファイルツリーを追加します。
 settings-code-global-search = グローバルファイル検索
 settings-code-global-search-desc = 左側ツールパネルにグローバルファイル検索を追加します。
+settings-code-show-hidden-files = プロジェクトエクスプローラーで隠しファイルを表示
+settings-code-show-hidden-files-desc = プロジェクトエクスプローラーでドットファイル(. で始まるファイル)を表示します。
 
 # --- ANCHOR-SUB-EXEC-MODAL-BLOCKS (agent-settings-misc) ---
 # ---- execution_profile_view ----
@@ -1664,6 +1666,7 @@ keybinding-desc-workspace-toggle-vertical-tabs-menu = 縦タブパネルを切�
 keybinding-desc-workspace-left-panel-agent-conversations = 左パネル: エージェント会話
 keybinding-desc-workspace-left-panel-project-explorer = 左パネル: プロジェクトエクスプローラー
 keybinding-desc-workspace-left-panel-global-search = 左パネル: グローバル検索
+keybinding-desc-workspace-toggle-hidden-files = プロジェクトエクスプローラーの隠しファイルを切り替え
 keybinding-desc-workspace-left-panel-warp-drive = 左パネル: Zap Drive
 keybinding-desc-workspace-left-panel-ssh-manager = 左パネル: SSH マネージャー
 keybinding-desc-workspace-open-global-search = グローバル検索を開く

@@ -93,6 +93,7 @@ use crate::workspace::view::{
     TOGGLE_NOTIFICATION_MAILBOX_BINDING_NAME, TOGGLE_PROJECT_EXPLORER_BINDING_NAME,
     TOGGLE_RIGHT_PANEL_BINDING_NAME, TOGGLE_TAB_CONFIGS_MENU_BINDING_NAME,
     TOGGLE_VERTICAL_TABS_PANEL_BINDING_NAME, TOGGLE_WARP_DRIVE_BINDING_NAME,
+    TOGGLE_HIDDEN_FILES_BINDING_NAME,
 };
 pub use one_time_modal_model::OneTimeModalModel;
 pub use registry::WorkspaceRegistry;
@@ -713,6 +714,15 @@ pub fn init(app: &mut AppContext) {
         .with_context_predicate(id!("Workspace") & id!(flags::SHOW_GLOBAL_SEARCH))
         .with_enabled(|| FeatureFlag::GlobalSearch.is_enabled())
         .with_custom_action(CustomAction::ToggleGlobalSearch),
+        EditableBinding::new(
+            TOGGLE_HIDDEN_FILES_BINDING_NAME,
+            BindingDescription::new(crate::t!("keybinding-desc-workspace-toggle-hidden-files")),
+            WorkspaceAction::ToggleHiddenFiles,
+        )
+        .with_group(bindings::BindingGroup::Navigation.as_str())
+        .with_context_predicate(id!("Workspace") & id!(flags::SHOW_PROJECT_EXPLORER))
+        .with_mac_key_binding("cmd-shift->")
+        .with_linux_or_windows_key_binding("ctrl-shift->"),
         EditableBinding::new(
             LEFT_PANEL_WARP_DRIVE_BINDING_NAME,
             BindingDescription::new(crate::t!("keybinding-desc-workspace-left-panel-warp-drive")),

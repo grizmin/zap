@@ -1193,6 +1193,8 @@ settings-code-project-explorer = 项目浏览器
 settings-code-project-explorer-desc = 在左侧工具面板添加 IDE 风格的项目浏览器 / 文件树。
 settings-code-global-search = 全局文件搜索
 settings-code-global-search-desc = 在左侧工具面板添加全局文件搜索。
+settings-code-show-hidden-files = 在项目浏览器中显示隐藏文件
+settings-code-show-hidden-files-desc = 在项目浏览器中显示隐藏文件(以 . 开头的文件)。
 
 # --- ANCHOR-SUB-EXEC-MODAL-BLOCKS (agent-settings-misc) ---
 # ---- execution_profile_view ----
@@ -1668,6 +1670,7 @@ keybinding-desc-workspace-toggle-vertical-tabs-menu = 切换垂直标签页面�
 keybinding-desc-workspace-left-panel-agent-conversations = 左侧面板：Agent 对话
 keybinding-desc-workspace-left-panel-project-explorer = 左侧面板：项目浏览器
 keybinding-desc-workspace-left-panel-global-search = 左侧面板：全局搜索
+keybinding-desc-workspace-toggle-hidden-files = 切换项目浏览器中的隐藏文件
 keybinding-desc-workspace-left-panel-warp-drive = 左侧面板：Zap Drive
 keybinding-desc-workspace-left-panel-ssh-manager = 左侧面板：SSH 管理器
 keybinding-desc-workspace-left-panel-skill-manager = 左侧面板：Skill 管理器
