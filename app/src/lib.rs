@@ -421,6 +421,14 @@ impl LaunchMode {
         }
     }
 
+    /// 是否应当启动本地回环 HTTP server(`crates/http_server`),它在固定端口上提供
+    /// app-installation detection 与 profiling。只有非 headless 的 GUI 实例才需要启动它,
+    /// 否则同机共存的 headless 进程(daemon、CLI、proxy)会争抢同一个固定端口。
+    #[cfg_attr(target_family = "wasm", allow(dead_code))]
+    fn should_start_local_http_server(&self) -> bool {
+        !self.is_headless()
+    }
+
     /// Whether or not to start a crash recovery process (on platforms that support it).
     #[cfg(enable_crash_recovery)]
     pub(crate) fn crash_recovery_enabled(&self) -> bool {
@@ -1738,13 +1746,15 @@ fn initialize_app(
 
     // When running natively, add the http server singleton to the application.
     #[cfg(not(target_family = "wasm"))]
-    ctx.add_singleton_model(move |ctx| {
-        let routers = vec![
-            app_installation_detection::make_router(),
-            profiling::make_router(),
-        ];
-        http_server::HttpServer::new(routers, ctx)
-    });
+    if launch_mode.should_start_local_http_server() {
+        ctx.add_singleton_model(move |ctx| {
+            let routers = vec![
+                app_installation_detection::make_router(),
+                profiling::make_router(),
+            ];
+            http_server::HttpServer::new(routers, ctx)
+        });
+    }
 
     app_state
 }
@@ -2692,3 +2702,7 @@ const UNSTABLE_FEATURES: &[(&str, FeatureFlag)] = &[
         FeatureFlag::WindowsHighPerformanceGpuDefault,
     ),
 ];
+
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;
