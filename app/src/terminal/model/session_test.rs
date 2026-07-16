@@ -100,3 +100,26 @@ fn test_set_env_var_emits_no_event_when_no_change() {
         });
     });
 }
+
+#[cfg(windows)]
+#[test]
+fn powershell_read_command_embeds_escaped_path_without_args() {
+    use std::ffi::{OsStr, OsString};
+
+    use super::powershell_read_all_text_command;
+
+    // The path is embedded directly inside a single-quoted PowerShell literal.
+    let raw = r"C:\Users\dev\AppData\Roaming\Microsoft\Windows\PowerShell\PSReadLine\ConsoleHost_history.txt";
+    let command = powershell_read_all_text_command(OsStr::new(raw));
+    assert_eq!(
+        command,
+        OsString::from(format!("[System.IO.File]::ReadAllText('{raw}')"))
+    );
+
+    // A single quote in the path is doubled so it can't terminate the literal.
+    let command = powershell_read_all_text_command(OsStr::new(r"C:\o'brien\history.txt"));
+    assert_eq!(
+        command,
+        OsString::from(r"[System.IO.File]::ReadAllText('C:\o''brien\history.txt')")
+    );
+}
