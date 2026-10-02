@@ -91,6 +91,17 @@ impl<T: View> ViewHandle<T> {
         app.update_view(self, update)
     }
 
+    /// Like `update`, but returns `None` instead of panicking when the view is
+    /// currently unavailable (its window has closed, or it is already being
+    /// updated further up the stack).
+    pub fn try_update<A, F, S>(&self, app: &mut A, update: F) -> Option<S>
+    where
+        A: UpdateView,
+        F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
+    {
+        app.try_update_view(self, update)
+    }
+
     pub fn is_focused(&self, app: &AppContext) -> bool {
         app.focused_view_id(self.window_id(app)) == Some(self.view_id)
     }
@@ -315,4 +326,20 @@ pub trait UpdateView: ReadView {
     where
         T: View,
         F: FnOnce(&mut T, &mut ViewContext<T>) -> S;
+
+    /// Like `update_view`, but returns `None` instead of panicking when the view
+    /// cannot be checked out (its window has closed, or it is already being
+    /// updated further up the stack). Implementations should override this with a
+    /// native fallible checkout; the default mirrors the semantics by checking
+    /// availability first.
+    fn try_update_view<T, F, S>(&mut self, handle: &ViewHandle<T>, update: F) -> Option<S>
+    where
+        T: View,
+        F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
+    {
+        if self.try_view(handle).is_none() {
+            return None;
+        }
+        Some(self.update_view(handle, update))
+    }
 }
