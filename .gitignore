@@ -30,6 +30,9 @@ script/font_fallback/downloaded_fonts
 
 # Don't include the generated Windows installer
 script/windows/Output
+# Local code-signing private keys and their password (public .cer files are fine to commit)
+script/windows/signing/*.pfx
+script/windows/signing/*.password
 .aider*
 
 # temporary vim files. Source: https://github.com/github/gitignore/blob/main/Global/Vim.gitignore
