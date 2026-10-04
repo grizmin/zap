@@ -9,6 +9,18 @@ use crate::terminal::model::index::Point;
 use crate::terminal::model::terminal_model::WithinModel;
 use crate::util::file::LinkValidationContext;
 
+/// Builds a single AltScreen candidate covering `token` at row 0, cols 0..len.
+fn candidate_for(token: &str) -> WithinModel<PossiblePath> {
+    let end_col = token.chars().count() - 1;
+    WithinModel::AltScreen(PossiblePath {
+        path: CleanPathResult {
+            path: token.into(),
+            line_and_column_num: None,
+        },
+        range: Point { row: 0, col: 0 }..=Point { row: 0, col: end_col },
+    })
+}
+
 #[test]
 fn strips_only_sentence_periods() {
     // A trailing period after a real file name is sentence punctuation.
@@ -51,17 +63,7 @@ fn compute_valid_paths_excludes_trailing_sentence_period() {
 
     // The captured token as it would appear in `Drafted at <abs path>.`
     let token = format!("{}.", file.to_string_lossy());
-    let end_col = token.chars().count() - 1;
-    let candidate = WithinModel::AltScreen(PossiblePath {
-        path: CleanPathResult {
-            path: token,
-            line_and_column_num: None,
-        },
-        range: Point { row: 0, col: 0 }..=Point {
-            row: 0,
-            col: end_col,
-        },
-    });
+    let candidate = candidate_for(&token);
 
     let link = TerminalView::compute_valid_paths(
         dir.path().to_str().unwrap(),
@@ -84,10 +86,68 @@ fn compute_valid_paths_excludes_trailing_sentence_period() {
     );
     // ...and the highlighted range stops before the trailing period.
     assert_eq!(
-        *file_link.link.range().end(),
+        *file_link.link.range.end(),
         Point {
             row: 0,
-            col: end_col - 1,
+            col: token.chars().count() - 2,
         }
     );
+}
+
+/// Plain relative paths must keep resolving against the working directory —
+/// the core behavior behind clickable file links in command output.
+#[test]
+fn compute_valid_paths_resolves_plain_relative_file() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("hello.txt"), "hi\n").unwrap();
+
+    let link = TerminalView::compute_valid_paths(
+        dir.path().to_str().unwrap(),
+        iter::once(candidate_for("hello.txt")),
+        1000,
+        None,
+        LinkValidationContext::Local,
+    )
+    .expect("a plain relative file in cwd must be detected as a link");
+
+    let GridHighlightedLink::File(file_link) = link else {
+        panic!("expected a file link");
+    };
+    assert_eq!(
+        file_link.get_inner().absolute_path.file_name().unwrap(),
+        "hello.txt"
+    );
+}
+
+/// Directories resolve too, as long as no line/column suffix is attached.
+#[test]
+fn compute_valid_paths_resolves_directory_in_cwd() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir(dir.path().join("sub")).unwrap();
+
+    let link = TerminalView::compute_valid_paths(
+        dir.path().to_str().unwrap(),
+        iter::once(candidate_for("sub")),
+        1000,
+        None,
+        LinkValidationContext::Local,
+    );
+
+    assert!(link.is_some(), "`sub/` exists in cwd but was not linked");
+}
+
+/// Nonexistent paths must NOT produce a link (validation still filters).
+#[test]
+fn compute_valid_paths_rejects_nonexistent_file() {
+    let dir = tempfile::tempdir().unwrap();
+
+    let link = TerminalView::compute_valid_paths(
+        dir.path().to_str().unwrap(),
+        iter::once(candidate_for("does-not-exist.txt")),
+        1000,
+        None,
+        LinkValidationContext::Local,
+    );
+
+    assert!(link.is_none(), "nonexistent file must not be linked");
 }
