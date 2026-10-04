@@ -476,6 +476,14 @@ impl UpdateView for App {
     {
         self.as_mut().update_view(handle, update)
     }
+
+    fn try_update_view<T, F, S>(&mut self, handle: &ViewHandle<T>, update: F) -> Option<S>
+    where
+        T: View,
+        F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
+    {
+        self.as_mut().try_update_view(handle, update)
+    }
 }
 
 impl ReadView for App {
@@ -4346,6 +4354,29 @@ impl UpdateView for AppContext {
         }
         self.flush_effects();
         result
+    }
+
+    fn try_update_view<T, F, S>(&mut self, handle: &ViewHandle<T>, update: F) -> Option<S>
+    where
+        T: View,
+        F: FnOnce(&mut T, &mut ViewContext<T>) -> S,
+    {
+        let window_id = handle.window_id(self);
+        let mut view = self.windows.get_mut(&window_id)?.views.remove(&handle.id())?;
+
+        self.pending_flushes += 1;
+        let mut ctx = ViewContext::new(self, window_id, handle.id());
+        let result = update(
+            view.as_any_mut()
+                .downcast_mut()
+                .expect("Downcast is type safe"),
+            &mut ctx,
+        );
+        if let Some(window) = self.windows.get_mut(&window_id) {
+            window.views.insert(handle.id(), view);
+        }
+        self.flush_effects();
+        Some(result)
     }
 }
 

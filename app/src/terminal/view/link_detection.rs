@@ -722,6 +722,7 @@ impl super::TerminalView {
                     &trimmed_cleaned_path,
                     ShellPathType::ShellNative(working_directory.to_string()),
                     shell_launch_data.as_ref(),
+                    &validation_ctx,
                 ) {
                     let new_end_point = possible_path.range.end().wrapping_sub(max_columns, 1);
                     link = Some(Self::create_valid_link(

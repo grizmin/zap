@@ -7,6 +7,7 @@ use super::{path_without_trailing_sentence_period, GridHighlightedLink};
 use crate::terminal::model::grid::grid_handler::PossiblePath;
 use crate::terminal::model::index::Point;
 use crate::terminal::model::terminal_model::WithinModel;
+use crate::util::file::LinkValidationContext;
 
 #[test]
 fn strips_only_sentence_periods() {
@@ -67,6 +68,7 @@ fn compute_valid_paths_excludes_trailing_sentence_period() {
         iter::once(candidate),
         1000,
         None,
+        LinkValidationContext::Local,
     )
     .expect("the markdown file should be detected as a link");
 

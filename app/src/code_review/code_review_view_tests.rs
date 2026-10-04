@@ -176,7 +176,7 @@ fn create_imported_line_comment(
         id: CommentId::new(),
         content: comment_content.to_string(),
         target: AttachedReviewCommentTarget::Line {
-            absolute_file_path: LocalOrRemotePath::Local(file_path.into()),
+            absolute_file_path: file_path.into(),
             line: EditorLineLocation::Current {
                 line_number: line_count,
                 line_range: line_count..LineCount::from(line_number + 1),
@@ -811,7 +811,7 @@ fn test_imported_context_line_comment_relocates_and_not_outdated() {
     App::test((), |mut app| async move {
         let _flag_override = FeatureFlag::PRCommentsSlashCommand.override_enabled(true);
 
-        let ctx = TestContext::new(&mut app, "test.txt", "line 1\nline 2\nline 3");
+        let ctx = TestContext::new(&mut app, PathBuf::from("test.txt"), "line 1\nline 2\nline 3");
 
         // Imported comment on line 2 as a CONTEXT line (leading-space marker).
         let comment = create_imported_line_comment(
@@ -828,7 +828,7 @@ fn test_imported_context_line_comment_relocates_and_not_outdated() {
             } = CodeReviewView::relocate_comments(
                 vec![comment],
                 &ctx.state,
-                &ctx.repo_location,
+                &ctx.repo_path,
                 view_ctx,
             );
 
@@ -852,7 +852,7 @@ fn test_imported_context_line_comment_removed_marked_outdated() {
     App::test((), |mut app| async move {
         let _flag_override = FeatureFlag::PRCommentsSlashCommand.override_enabled(true);
 
-        let ctx = TestContext::new(&mut app, "test.txt", "line 1\nline 3");
+        let ctx = TestContext::new(&mut app, PathBuf::from("test.txt"), "line 1\nline 3");
 
         // Imported context comment on a line (" old line 2") that no longer exists.
         let comment = create_imported_line_comment(
@@ -869,7 +869,7 @@ fn test_imported_context_line_comment_removed_marked_outdated() {
             } = CodeReviewView::relocate_comments(
                 vec![comment],
                 &ctx.state,
-                &ctx.repo_location,
+                &ctx.repo_path,
                 view_ctx,
             );
 
@@ -894,7 +894,7 @@ fn test_native_indented_context_comment_not_outdated() {
     App::test((), |mut app| async move {
         let _flag_override = FeatureFlag::PRCommentsSlashCommand.override_enabled(true);
 
-        let ctx = TestContext::new(&mut app, "test.txt", "fn f() {\n    let x = 1;\n}");
+        let ctx = TestContext::new(&mut app, PathBuf::from("test.txt"), "fn f() {\n    let x = 1;\n}");
 
         // Native comment on the indented line; content is the raw line (no marker).
         let line_count = LineCount::from(1);
@@ -902,7 +902,7 @@ fn test_native_indented_context_comment_not_outdated() {
             id: CommentId::new(),
             content: "Comment on an indented native line".to_string(),
             target: AttachedReviewCommentTarget::Line {
-                absolute_file_path: LocalOrRemotePath::Local(PathBuf::from("/repo/test.txt")),
+                absolute_file_path: PathBuf::from("/repo/test.txt"),
                 line: EditorLineLocation::Current {
                     line_number: line_count,
                     line_range: line_count..LineCount::from(2),
@@ -927,7 +927,7 @@ fn test_native_indented_context_comment_not_outdated() {
             } = CodeReviewView::relocate_comments(
                 vec![comment],
                 &ctx.state,
-                &ctx.repo_location,
+                &ctx.repo_path,
                 view_ctx,
             );
 
