@@ -2189,6 +2189,7 @@ toggle-suffix-left-option-meta = 左 Option 键作为 Meta
 toggle-suffix-left-alt-meta = 左 Alt 键作为 Meta
 toggle-suffix-right-option-meta = 右 Option 键作为 Meta
 toggle-suffix-right-alt-meta = 右 Alt 键作为 Meta
+toggle-suffix-mouse-reporting = 鼠标事件上报
 toggle-suffix-scroll-reporting = 滚动事件上报
 toggle-suffix-completions-while-typing = 输入时补全
 toggle-suffix-command-corrections = 命令纠错

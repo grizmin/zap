@@ -263,6 +263,19 @@ pub fn init_actions_from_parent_view<T: Action + Clone>(
                 .is_supported_on_current_platform(),
         ),
         ToggleSettingActionPair::new(
+            &crate::t!("toggle-suffix-mouse-reporting"),
+            builder(SettingsAction::FeaturesPageToggle(
+                FeaturesPageAction::ToggleMouseReporting,
+            )),
+            context,
+            flags::MOUSE_REPORTING_CONTEXT_FLAG,
+        )
+        .is_supported_on_current_platform(
+            AltScreenReporting::as_ref(app)
+                .mouse_reporting_enabled
+                .is_supported_on_current_platform(),
+        ),
+        ToggleSettingActionPair::new(
             &crate::t!("toggle-suffix-scroll-reporting"),
             builder(SettingsAction::FeaturesPageToggle(
                 FeaturesPageAction::ToggleScrollReporting,

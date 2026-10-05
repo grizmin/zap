@@ -2264,6 +2264,7 @@ toggle-suffix-left-option-meta = Left Option key is Meta
 toggle-suffix-left-alt-meta = Left Alt key is Meta
 toggle-suffix-right-option-meta = Right Option key is Meta
 toggle-suffix-right-alt-meta = Right Alt key is Meta
+toggle-suffix-mouse-reporting = mouse reporting
 toggle-suffix-scroll-reporting = scroll reporting
 toggle-suffix-completions-while-typing = completions while typing
 toggle-suffix-command-corrections = command corrections
