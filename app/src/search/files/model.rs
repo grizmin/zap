@@ -138,25 +138,40 @@ impl FileSearchModel {
 
     /// Gets repository contents (files and directories) from the LocalRepoMetadataModel for the current working directory.
     /// Results are cached per repo root and invalidated when the file tree changes.
+    ///
+    /// When `query` is non-empty, it is pushed down into the repo-metadata
+    /// traversal as a filter so the result budget applies to *matching* files
+    /// rather than the first files encountered in traversal order. These
+    /// query-specific results are not cached. When `query` is empty (zero
+    /// state) the full unfiltered contents are returned and cached per repo
+    /// root, invalidated when the file tree changes.
     #[cfg(feature = "local_fs")]
-    pub fn get_repo_contents(&self, app: &AppContext) -> Arc<Vec<FileSearchResult>> {
+    pub fn get_repo_contents(&self, query: &str, app: &AppContext) -> Arc<Vec<FileSearchResult>> {
         let Some(repo_root) = self.repo_root(app) else {
             return Arc::new(Vec::new());
         };
-
-        if let Some(cached) = self.repo_contents_cache.borrow().get(&repo_root) {
-            return cached.clone();
-        }
 
         let repo_metadata = RepoMetadataModel::as_ref(app);
         let Some(id) = repo_metadata::RepositoryIdentifier::try_local(&repo_root) else {
             return Arc::new(Vec::new());
         };
-        let contents = if repo_metadata.has_repository(&id, app) {
-            self.get_contents_from_repo(&repo_root, repo_metadata, GetContentsArgs::default(), app)
-        } else {
-            Vec::new()
-        };
+        if !repo_metadata.has_repository(&id, app) {
+            return Arc::new(Vec::new());
+        }
+        // Query-filtered results are query-specific, so bypass the per-repo
+        // cache and traverse the in-memory index fresh. Empty (zero-state)
+        // queries use the cached, unfiltered contents.
+        if !query.is_empty() {
+            let args = Self::contents_args(&repo_root, query, true);
+            return Arc::new(self.get_contents_from_repo(&repo_root, repo_metadata, args, app));
+        }
+
+        if let Some(cached) = self.repo_contents_cache.borrow().get(&repo_root) {
+            return cached.clone();
+        }
+
+        let contents =
+            self.get_contents_from_repo(&repo_root, repo_metadata, GetContentsArgs::default(), app);
 
         let arc = Arc::new(contents);
         self.repo_contents_cache
@@ -165,14 +180,22 @@ impl FileSearchModel {
         arc
     }
 
-    /// Gets repository files (no directories) for the current working directory.
+    /// Gets repository files (no directories) matching `query` for the current
+    /// working directory.
     ///
-    /// Intended for search surfaces that only ever open files and cannot act on
-    /// directory entries, such as the Command Palette file filter. Excluding
-    /// directories keeps them from consuming the repo-metadata result cap, which
-    /// otherwise starves file matches when many directories match the query.
+    /// Combines the two guarantees of the sibling methods: like
+    /// [`Self::get_repo_contents`] it pushes a non-empty `query` down into the
+    /// traversal as a filter, and like [`Self::get_repo_file_contents`] it keeps
+    /// directories out of the traversal so they cannot consume the result budget
+    /// and starve file matches. Used by search surfaces that only open files,
+    /// such as the Command Palette file filter. Empty queries fall back to the
+    /// unfiltered (but still folder-excluded) listing.
     #[cfg(feature = "local_fs")]
-    pub fn get_repo_file_contents(&self, app: &AppContext) -> Arc<Vec<FileSearchResult>> {
+    pub fn get_repo_file_contents(
+        &self,
+        query: &str,
+        app: &AppContext,
+    ) -> Arc<Vec<FileSearchResult>> {
         let Some(repo_root) = self.repo_root(app) else {
             return Arc::new(Vec::new());
         };
@@ -186,7 +209,7 @@ impl FileSearchModel {
         if !repo_metadata.has_repository(&id, app) {
             return Arc::new(Vec::new());
         }
-        let args = GetContentsArgs::default().exclude_folders();
+        let args = Self::contents_args(&repo_root, query, false);
         Arc::new(self.get_contents_from_repo(&repo_root, repo_metadata, args, app))
     }
 
@@ -197,7 +220,7 @@ impl FileSearchModel {
         &self,
         app: &AppContext,
     ) -> (Arc<Vec<FileSearchResult>>, HashSet<String>) {
-        let contents = self.get_repo_contents(app);
+        let contents = self.get_repo_contents("", app);
         let git_changed_files = self
             .repo_root(app)
             .and_then(|repo_root| self.get_git_changed_files(&repo_root).ok())
@@ -207,13 +230,17 @@ impl FileSearchModel {
 
     /// Gets repository contents from the LocalRepoMetadataModel for the current working directory (WASM stub)
     #[cfg(not(feature = "local_fs"))]
-    pub fn get_repo_contents(&self, _app: &AppContext) -> Arc<Vec<FileSearchResult>> {
+    pub fn get_repo_contents(&self, _query: &str, _app: &AppContext) -> Arc<Vec<FileSearchResult>> {
         Arc::new(Vec::new())
     }
 
     /// Gets repository files (no directories) for the current working directory (WASM stub)
     #[cfg(not(feature = "local_fs"))]
-    pub fn get_repo_file_contents(&self, _app: &AppContext) -> Arc<Vec<FileSearchResult>> {
+    pub fn get_repo_file_contents(
+        &self,
+        _query: &str,
+        _app: &AppContext,
+    ) -> Arc<Vec<FileSearchResult>> {
         Arc::new(Vec::new())
     }
 
@@ -224,6 +251,43 @@ impl FileSearchModel {
         _app: &AppContext,
     ) -> (Arc<Vec<FileSearchResult>>, HashSet<String>) {
         (Arc::new(Vec::new()), HashSet::new())
+    }
+
+    /// Builds the [`GetContentsArgs`] used to traverse repo metadata for a
+    /// non-empty query.
+    ///
+    /// Installs a traversal filter that keeps only entries whose repo-relative
+    /// path fuzzy-matches the query (via [`Self::fuzzy_match_path`]). Pushing
+    /// the query into traversal ensures the repo-metadata result budget applies
+    /// to *matching* files rather than the first files encountered in traversal
+    /// order. The relative path is produced by stripping the canonicalized repo
+    /// root prefix from each entry's absolute path.
+    #[cfg(feature = "local_fs")]
+    fn contents_args(repo_path: &Path, query: &str, include_folders: bool) -> GetContentsArgs {
+        let Ok(canonical_repo_path) = dunce::canonicalize(repo_path) else {
+            return if include_folders {
+                GetContentsArgs::default()
+            } else {
+                GetContentsArgs::default().exclude_folders()
+            };
+        };
+        let query = query.to_string();
+        let base_args = if include_folders {
+            GetContentsArgs::default()
+        } else {
+            GetContentsArgs::default().exclude_folders()
+        };
+        base_args.with_filter(move |content| {
+            let local = match content {
+                repo_metadata::RepoContent::File(file) => file.path.to_local_path_lossy(),
+                repo_metadata::RepoContent::Directory(dir) => dir.path.to_local_path_lossy(),
+            };
+            local
+                .strip_prefix(&canonical_repo_path)
+                .ok()
+                .map(|relative| relative.to_string_lossy().to_string())
+                .is_some_and(|path| FileSearchModel::fuzzy_match_path(&path, &query).is_some())
+        })
     }
 
     /// Helper method to get repository contents from a specific repository

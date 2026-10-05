@@ -134,6 +134,57 @@ mod tests {
         });
     }
 
+    /// A query-style traversal filter must be evaluated *before* an entry is
+    /// collected, so a matching file placed well past a large number of
+    /// non-matching files in traversal order is still returned. This mirrors
+    /// the guarantee that keeps file search from truncating matches away.
+    #[test]
+    fn test_get_repo_contents_filter_applies_before_cap() {
+        let base = std::env::temp_dir().join("filter_before_cap_repo");
+        let repo_path = StandardizedPath::try_from_local(&base).unwrap();
+
+        // Many non-matching files, then a single matching "needle" file placed
+        // last so it sits well beyond any result budget in traversal order.
+        let noise_count = 150;
+        let mut children: Vec<Entry> = (0..noise_count)
+            .map(|i| Entry::File(FileMetadata::new(base.join(format!("file{i}.txt")), false)))
+            .collect();
+        children.push(Entry::File(FileMetadata::new(
+            base.join("needle.rs"),
+            false,
+        )));
+        let root = Entry::Directory(DirectoryEntry {
+            path: repo_path.clone(),
+            children,
+            ignored: false,
+            loaded: true,
+        });
+        let state = FileTreeState::new(root, Vec::new(), None);
+
+        let mut model = LocalRepoMetadataModel::new_for_test();
+        model
+            .repositories
+            .insert(repo_path.clone(), IndexedRepoState::Indexed(state));
+
+        let args = GetContentsArgs::default().with_filter(|content| match content {
+            crate::RepoContent::File(file) => file
+                .path
+                .to_local_path_lossy()
+                .to_string_lossy()
+                .contains("needle"),
+            crate::RepoContent::Directory(_) => false,
+        });
+        let contents = model.get_repo_contents(&repo_path, args).unwrap();
+
+        // The single matching file is returned despite sorting past the noise.
+        assert_eq!(contents.len(), 1);
+        assert!(matches!(
+            &contents[0],
+            crate::RepoContent::File(file)
+                if file.path.to_local_path_lossy() == base.join("needle.rs")
+        ));
+    }
+
     #[cfg(feature = "local_fs")]
     #[test]
     fn test_lazy_loaded_path_registrations_are_refcounted() {
