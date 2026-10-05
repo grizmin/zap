@@ -136,6 +136,10 @@ impl FileDataSource {
             repo_root.and_then(|repo_root| opened_files.opened_files_for_repo(&repo_root));
 
         for item in contents.iter() {
+            if item.is_directory {
+                continue;
+            }
+
             let mut file_ranking = if git_changed_files.contains(&item.path) {
                 FileRanking::ChangedInGit
             } else {
@@ -236,16 +240,15 @@ impl FileDataSource {
             // allow the main thread to abort the search if needed.
             for chunk in contents.chunks(CHUNK_SIZE) {
                 for item in chunk {
+                    if item.is_directory {
+                        continue;
+                    }
+
                     let Some(mut match_result) =
                         FileSearchModel::fuzzy_match_path(&item.path, &query_file_content)
                     else {
                         continue;
                     };
-
-                    // Never show directories -- there's no way to open them currently.
-                    if item.is_directory {
-                        continue;
-                    }
 
                     if opened_files
                         .as_ref()
@@ -294,3 +297,7 @@ impl FileDataSource {
 impl Entity for FileDataSource {
     type Event = ();
 }
+
+#[cfg(test)]
+#[path = "data_source_tests.rs"]
+mod tests;
