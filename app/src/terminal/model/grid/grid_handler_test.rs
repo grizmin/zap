@@ -2200,3 +2200,49 @@ fn content_len_equals_len_when_no_trailing_blanks() {
     let expected = grid.grid_storage().max_cursor_point.row.0 + grid.history_size() + 1;
     assert_eq!(grid.content_len(), expected);
 }
+
+// ─── Wide-character spacer truncated by a no-reflow column shrink ─────
+//
+// NOTE(warpdotdev/warp#12726 port): Upstream drives this regression through
+// `FullGridClearBehavior::Clear` (warpdotdev/warp#9877), which does not exist
+// in Zap. The only no-reflow (`reflow = false`) resize path Zap has is the alt
+// screen, so this test uses `new_for_alt_screen_test` to reach the same
+// `GridStorage::shrink_cols` code that the fix repairs.
+//
+// The upstream version also pushed the retained row through flat storage and
+// materialized it (`flat_storage.push_rows` / `pop_rows`), because that is what
+// made `RowIterator::next` panic. Alt-screen grids have no flat storage, so
+// here the orphaned wide character is asserted directly on grid storage instead.
+
+#[test]
+fn test_no_reflow_resize_shrink_cols_does_not_orphan_wide_char_at_boundary() {
+    use crate::terminal::model::ansi::{Color, NamedColor};
+
+    let old_cols = 6;
+    let new_cols = 5;
+    let num_rows = 1;
+
+    let mut grid = GridHandler::new_for_alt_screen_test(num_rows, old_cols);
+    for c in ['a', 'b', 'c', 'd', 'Ｗ'] {
+        grid.input(c);
+    }
+    grid.grid_storage_mut()[VisibleRow(0)][new_cols - 1].bg = Color::Named(NamedColor::Red);
+
+    assert!(grid.grid_storage()[VisibleRow(0)][new_cols - 1]
+        .flags
+        .contains(Flags::WIDE_CHAR));
+    assert!(grid.grid_storage()[VisibleRow(0)][new_cols]
+        .flags
+        .contains(Flags::WIDE_CHAR_SPACER));
+
+    grid.resize(SizeInfo::new_without_font_metrics(num_rows, new_cols));
+
+    assert_no_orphaned_wide_chars(&grid, VisibleRow(0));
+
+    // The split wide character must be reset to the resize-empty cell, keeping
+    // only its background color.
+    assert_eq!(
+        grid.grid_storage()[VisibleRow(0)][new_cols - 1],
+        Cell::from(Color::Named(NamedColor::Red))
+    );
+}
