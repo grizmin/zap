@@ -30,8 +30,13 @@ pub struct RegexLevelMetadata {
 lazy_static! {
     /// Used for secret redaction in the Grid.
     /// Initially empty - will be populated with user-defined regexes when safe mode is enabled.
+    ///
+    /// Unicode word-boundary support is disabled (ASCII-only `\b`): the grid scanner feeds terminal
+    /// cells to the DFA byte-by-byte, and a Unicode-aware word boundary aborts scanning once a
+    /// multibyte character appears before a match. Custom patterns keep their meaning because
+    /// `RegexDFAs::new_many` rewrites `\b`/`\B` to the ASCII-only form.
     pub(in crate::terminal::model) static ref SECRETS_DFA: RwLock<RegexDFAs> = RwLock::new(
-        RegexDFAs::new_many(&[], true, true)
+        RegexDFAs::new_many(&[], false, true)
             .expect("should be able to construct empty regex DFA")
     );
     /// Used for secret redaction in simple text strings (e.g.: rich content blocks).
@@ -371,7 +376,10 @@ pub fn set_user_and_enterprise_secret_regexes<'a>(
         }
     }
 
-    match RegexDFAs::new_many(&all_secrets, true, true) {
+    // Use ASCII-only word boundaries for the grid DFA: scanning terminal cells byte-by-byte aborts
+    // at a Unicode word boundary when a multibyte character precedes a match. `\b`/`\B` in custom
+    // patterns are rewritten to the ASCII form by `RegexDFAs::new_many`.
+    match RegexDFAs::new_many(&all_secrets, false, true) {
         Ok(dfa) => {
             *secrets = dfa;
         }
