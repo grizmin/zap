@@ -794,11 +794,13 @@ struct RenderedImageCacheKey {
     animated_image_behavior: AnimatedImageBehavior,
 }
 
-#[derive(Default)]
+type RenderedImageCache = HashMap<u64, HashMap<RenderedImageCacheKey, Rc<Image>>>;
+
+#[derive(Clone, Default)]
 pub struct ImageCache {
     /// Map of images of any ImageType already scaled to a certain size.
     /// Uses the hashed AssetSource and rendered-image properties as a key.
-    images: RwLock<HashMap<u64, HashMap<RenderedImageCacheKey, Rc<Image>>>>,
+    images: Rc<RwLock<RenderedImageCache>>,
 }
 
 impl ImageCache {

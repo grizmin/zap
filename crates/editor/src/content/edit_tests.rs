@@ -4,7 +4,10 @@ use super::{
 use crate::{
     content::{
         buffer::{StyledBufferRun, StyledTextBlock},
-        edit::{ParsedUrl, highlight_urls, resolve_asset_source_relative_to_directory},
+        edit::{
+            ParsedUrl, highlight_urls, resolve_asset_source,
+            resolve_asset_source_relative_to_directory,
+        },
         mermaid_diagram::{mermaid_asset_source, mermaid_diagram_layout},
         text::{BufferBlockStyle, CodeBlockType, TextStylesWithMetadata},
     },
@@ -14,6 +17,10 @@ use crate::{
     },
 };
 use std::path::Path;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
+use std::time::{SystemTime, UNIX_EPOCH};
 use string_offset::CharOffset;
 use warp_core::features::FeatureFlag;
 use warpui::{
@@ -390,10 +397,68 @@ fn test_resolve_asset_source_relative_to_directory_uses_base_directory() {
         resolve_asset_source_relative_to_directory("diagram.png", Some(Path::new("/tmp/session")));
 
     match asset_source {
-        AssetSource::LocalFile { path } => {
+        AssetSource::LocalFile { path, .. } => {
             assert_eq!(Path::new(&path), Path::new("/tmp/session/diagram.png"));
         }
         source => panic!("expected local file asset source, got {source:?}"),
+    }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn unique_markdown_image_path() -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after the Unix epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "warp_editor_markdown_image_{}_{nonce}.png",
+        std::process::id()
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn test_resolve_asset_source_versions_local_files_for_markdown_layout() {
+    let image_path = unique_markdown_image_path();
+    std::fs::write(&image_path, b"old").expect("write initial image contents");
+    let document_path = image_path.with_file_name("document.md");
+    let image_name = image_path
+        .file_name()
+        .expect("image path should have a file name")
+        .to_string_lossy();
+
+    let initial = resolve_asset_source(&image_name, Some(&document_path));
+    assert!(matches!(
+        &initial,
+        AssetSource::LocalFile {
+            content_version: Some(_),
+            ..
+        }
+    ));
+
+    std::fs::write(&image_path, b"updated image contents").expect("update image contents");
+    let updated = resolve_asset_source(&image_name, Some(&document_path));
+    assert_ne!(
+        initial, updated,
+        "an updated Markdown image should produce a new cache key"
+    );
+
+    let _ = std::fs::remove_file(image_path);
+}
+
+#[test]
+fn test_resolve_asset_source_leaves_non_local_markdown_images_unchanged() {
+    let document_path = Path::new("/tmp/document.md");
+    let base_directory = document_path.parent();
+
+    // 上游用 data URI 作为第二个非本地来源；Zap 没有 `data_uri_source`（属 warpdotdev/warp#13620），
+    // 在 Zap 中 data: 会被解析成 LocalFile，故改用 bundled 来源覆盖同等的「非本地来源不变」语义。
+    for source in ["https://example.com/image.png", "asset:///bundled/icon.svg"] {
+        assert_eq!(
+            resolve_asset_source(source, Some(document_path)),
+            resolve_asset_source_relative_to_directory(source, base_directory),
+            "non-local source should not be changed: {source}"
+        );
     }
 }
 
