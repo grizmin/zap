@@ -342,6 +342,7 @@ use crate::{
 use crate::{send_telemetry_from_ctx, GlobalResourceHandles};
 
 use futures::Future;
+use instant::Instant;
 use itertools::Itertools;
 use parking_lot::FairMutex;
 use pathfinder_geometry::rect::RectF;
@@ -887,6 +888,7 @@ pub struct Workspace {
     import_modal: ViewHandle<ImportModal>,
     theme_chooser_view: ViewHandle<ThemeChooser>,
     previous_theme: Option<ThemeKind>,
+    background_image_animation_start_time: Instant,
     /// The per-window theme override selected for this window via the theme
     /// chooser's "This window" scope, if any. Source of truth that feeds
     /// `WindowSnapshot` at save time and is re-applied on restore. `None` when
@@ -2882,6 +2884,7 @@ impl Workspace {
             ctrl_tab_palette,
             mouse_states: Default::default(),
             previous_theme: None,
+            background_image_animation_start_time: Instant::now(),
             theme_override: None,
             previous_theme_override: None,
             settings_pane,
@@ -21618,6 +21621,9 @@ impl View for Workspace {
                         .cover()
                         .with_opacity(opacity_ratio)
                         .with_corner_radius(window_corner_radius)
+                        .enable_animation_with_start_time(
+                            self.background_image_animation_start_time,
+                        )
                         .finish(),
                 )
                 .finish(),
