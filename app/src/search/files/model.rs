@@ -165,6 +165,31 @@ impl FileSearchModel {
         arc
     }
 
+    /// Gets repository files (no directories) for the current working directory.
+    ///
+    /// Intended for search surfaces that only ever open files and cannot act on
+    /// directory entries, such as the Command Palette file filter. Excluding
+    /// directories keeps them from consuming the repo-metadata result cap, which
+    /// otherwise starves file matches when many directories match the query.
+    #[cfg(feature = "local_fs")]
+    pub fn get_repo_file_contents(&self, app: &AppContext) -> Arc<Vec<FileSearchResult>> {
+        let Some(repo_root) = self.repo_root(app) else {
+            return Arc::new(Vec::new());
+        };
+
+        // File-only results are not cached, since the shared per-repo cache
+        // holds the directory-inclusive contents.
+        let repo_metadata = RepoMetadataModel::as_ref(app);
+        let Some(id) = repo_metadata::RepositoryIdentifier::try_local(&repo_root) else {
+            return Arc::new(Vec::new());
+        };
+        if !repo_metadata.has_repository(&id, app) {
+            return Arc::new(Vec::new());
+        }
+        let args = GetContentsArgs::default().exclude_folders();
+        Arc::new(self.get_contents_from_repo(&repo_root, repo_metadata, args, app))
+    }
+
     /// Gets repository contents with git status information for prioritization.
     /// Reuses the cached repo contents from `get_repo_contents`.
     #[cfg(feature = "local_fs")]
@@ -183,6 +208,12 @@ impl FileSearchModel {
     /// Gets repository contents from the LocalRepoMetadataModel for the current working directory (WASM stub)
     #[cfg(not(feature = "local_fs"))]
     pub fn get_repo_contents(&self, _app: &AppContext) -> Arc<Vec<FileSearchResult>> {
+        Arc::new(Vec::new())
+    }
+
+    /// Gets repository files (no directories) for the current working directory (WASM stub)
+    #[cfg(not(feature = "local_fs"))]
+    pub fn get_repo_file_contents(&self, _app: &AppContext) -> Arc<Vec<FileSearchResult>> {
         Arc::new(Vec::new())
     }
 
