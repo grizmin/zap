@@ -579,6 +579,7 @@ pub(crate) const TOGGLE_TAB_CONFIGS_MENU_BINDING_NAME: &str = "workspace:toggle_
 pub(crate) const LEFT_PANEL_PROJECT_EXPLORER_BINDING_NAME: &str =
     "workspace:left_panel_project_explorer";
 pub(crate) const LEFT_PANEL_GLOBAL_SEARCH_BINDING_NAME: &str = "workspace:left_panel_global_search";
+pub(crate) const TOGGLE_HIDDEN_FILES_BINDING_NAME: &str = "file_tree:toggle_hidden_files";
 pub(crate) const LEFT_PANEL_WARP_DRIVE_BINDING_NAME: &str = "workspace:left_panel_warp_drive";
 pub(crate) const LEFT_PANEL_AGENT_CONVERSATIONS_BINDING_NAME: &str =
     "workspace:left_panel_agent_conversations";
@@ -20363,6 +20364,11 @@ impl TypedActionView for Workspace {
                     );
                 }
             }
+            ToggleHiddenFiles => {
+                CodeSettings::handle(ctx).update(ctx, |settings, ctx| {
+                    report_if_error!(settings.show_hidden_files.toggle_and_save_value(ctx));
+                });
+            }
             OpenGlobalSearch => {
                 if FeatureFlag::GlobalSearch.is_enabled()
                     && *CodeSettings::as_ref(ctx).show_global_search
@@ -20632,6 +20638,9 @@ impl View for Workspace {
         }
         if *CodeSettings::as_ref(app).show_global_search {
             context.set.insert(flags::SHOW_GLOBAL_SEARCH);
+        }
+        if *CodeSettings::as_ref(app).show_hidden_files {
+            context.set.insert(flags::SHOW_HIDDEN_FILES);
         }
 
         if self.auth_state.is_anonymous_or_logged_out() {

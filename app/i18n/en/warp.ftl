@@ -1214,6 +1214,8 @@ settings-code-project-explorer = Project explorer
 settings-code-project-explorer-desc = Adds an IDE-style project explorer / file tree to the left side tools panel.
 settings-code-global-search = Global file search
 settings-code-global-search-desc = Adds global file search to the left side tools panel.
+settings-code-show-hidden-files = Show hidden files in project explorer
+settings-code-show-hidden-files-desc = Show dotfiles and hidden files (starting with .) in the project explorer.
 
 # --- ANCHOR-SUB-EXEC-MODAL-BLOCKS (agent-settings-misc) ---
 # ---- execution_profile_view ----
@@ -1744,6 +1746,7 @@ keybinding-desc-workspace-toggle-vertical-tabs-menu = Toggle Vertical Tabs Panel
 keybinding-desc-workspace-left-panel-agent-conversations = Left Panel: Agent conversations
 keybinding-desc-workspace-left-panel-project-explorer = Left Panel: Project explorer
 keybinding-desc-workspace-left-panel-global-search = Left Panel: Global search
+keybinding-desc-workspace-toggle-hidden-files = Toggle hidden files in Project Explorer
 keybinding-desc-workspace-left-panel-warp-drive = Left Panel: Zap Drive
 keybinding-desc-workspace-left-panel-ssh-manager = Left Panel: SSH Manager
 keybinding-desc-workspace-left-panel-skill-manager = Left Panel: Skill Manager

@@ -516,6 +516,7 @@ pub enum WorkspaceAction {
     NavigateNextPaneOrPanel,
     ToggleProjectExplorer,
     ToggleGlobalSearch,
+    ToggleHiddenFiles,
     OpenGlobalSearch,
     ToggleConversationListView,
     /// Reset the AWS Bedrock login banner dismissed state (for debugging).
@@ -831,6 +832,7 @@ impl WorkspaceAction {
             | NavigateNextPaneOrPanel
             | ToggleProjectExplorer
             | ToggleGlobalSearch
+            | ToggleHiddenFiles
             | OpenGlobalSearch
             | ToggleConversationListView
             | ToggleNotificationMailbox { .. }
