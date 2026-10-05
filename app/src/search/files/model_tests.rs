@@ -1,6 +1,8 @@
 use super::super::search_item::{FileSearchItem, FileSearchResult};
 use super::FileSearchModel;
 use fuzzy_match::FuzzyMatchResult;
+#[cfg(feature = "local_fs")]
+use repo_metadata::local_model::GetContentsArgs;
 use repo_metadata::repositories::DetectedRepositories;
 use repo_metadata::RepoMetadataModel;
 use warpui::{App, SingletonEntity};
@@ -149,6 +151,21 @@ mod file_search_model_tests {
         assert!(!FileSearchModel::should_skip_overly_broad_query("*.rs"));
         assert!(!FileSearchModel::should_skip_overly_broad_query("src/main"));
         assert!(!FileSearchModel::should_skip_overly_broad_query("a*b"));
+    }
+
+    #[cfg(feature = "local_fs")]
+    #[test]
+    fn get_repo_file_contents_args_keep_folders_out_of_traversal() {
+        // The file-only path used by the Command Palette file filter must set
+        // `include_folders = false` so directories are dropped *during*
+        // traversal and cannot consume the repo-metadata result cap.
+        let args = GetContentsArgs::default().exclude_folders();
+        assert!(!args.include_folders);
+
+        // The default (directory-inclusive) path is used by callers like the
+        // AI context menu and must keep folders in the traversal.
+        let default_args = GetContentsArgs::default();
+        assert!(default_args.include_folders);
     }
 
     #[test]
