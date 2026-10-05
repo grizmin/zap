@@ -20,6 +20,7 @@ use lazy_static::lazy_static;
 use num_traits::Float as _;
 use std::cmp::Ordering;
 use std::ops::Range;
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::{collections::HashMap, ops::RangeInclusive};
 use unicode_width::UnicodeWidthChar;
 use warp_core::features::FeatureFlag;
@@ -55,6 +56,16 @@ const UNDERLINE_THICKNESS_SCALE_FACTOR: f32 = 0.15;
 
 /// Diameter of the circle at the top of the selection cursor.
 const SELECTION_CURSOR_TOP_DIAMETER: f32 = 5.;
+
+/// Set to `true` once the out-of-bounds row error has been logged in the
+/// non-ligature rendering path, so the error is reported at most once per
+/// process run.
+static OUT_OF_BOUNDS_ROW_REPORTED_NO_LIGATURES: AtomicBool = AtomicBool::new(false);
+
+/// Set to `true` once the out-of-bounds row error has been logged in the
+/// ligature rendering path, so the error is reported at most once per
+/// process run.
+static OUT_OF_BOUNDS_ROW_REPORTED_LIGATURES: AtomicBool = AtomicBool::new(false);
 
 /// Stores count of occurrences of distinct colors as a grid is rendered, which we can use to
 /// compute the most common background color of a grid and color-match other UI elements against
@@ -327,6 +338,7 @@ pub fn render_grid<'a>(
                 start_row,
                 end_row,
                 visible_rows,
+                true,
                 colors,
                 override_colors,
                 theme,
@@ -359,6 +371,7 @@ pub fn render_grid<'a>(
                 start_row,
                 end_row,
                 start_row..end_row,
+                false,
                 colors,
                 override_colors,
                 theme,
@@ -392,6 +405,7 @@ pub fn render_grid<'a>(
                 start_row,
                 end_row,
                 visible_rows,
+                true,
                 colors,
                 override_colors,
                 theme,
@@ -425,6 +439,7 @@ pub fn render_grid<'a>(
                 start_row,
                 end_row,
                 start_row..end_row,
+                false,
                 colors,
                 override_colors,
                 theme,
@@ -462,6 +477,7 @@ fn render_grid_without_ligatures<'a>(
     start_row: usize,
     end_row: usize,
     visible_rows: impl Iterator<Item = usize>,
+    used_displayed_output_rows: bool,
     colors: &color::List,
     override_colors: &color::OverrideList,
     theme: &WarpTheme,
@@ -620,8 +636,18 @@ fn render_grid_without_ligatures<'a>(
         let offset_row = start_row + offset;
 
         let Some(row) = grid.row(row_idx) else {
-            #[cfg(debug_assertions)]
-            log::error!("grid_renderer should not try to render an out-of-bounds row");
+            // Report at most once per run to avoid flooding the logs while
+            // the desync persists across paints.
+            if !OUT_OF_BOUNDS_ROW_REPORTED_NO_LIGATURES.swap(true, AtomicOrdering::Relaxed) {
+                let total_rows = grid.total_rows();
+                log::error!(
+                    "grid_renderer should not try to render an out-of-bounds row \
+                     (row_idx={row_idx} total_rows={total_rows} \
+                     start_row={start_row} end_row={end_row} \
+                     used_displayed_output_rows={used_displayed_output_rows} \
+                     use_ligature_rendering=false)"
+                );
+            }
             continue;
         };
 
@@ -972,6 +998,7 @@ fn render_grid_with_ligatures<'a>(
     start_row: usize,
     end_row: usize,
     visible_rows: impl Iterator<Item = usize>,
+    used_displayed_output_rows: bool,
     colors: &color::List,
     override_colors: &color::OverrideList,
     theme: &WarpTheme,
@@ -1132,7 +1159,18 @@ fn render_grid_with_ligatures<'a>(
         );
 
         let Some(row) = grid.row(row_idx) else {
-            log::error!("grid_renderer should not try to render an out-of-bounds row");
+            // Report at most once per run to avoid flooding the logs while
+            // the desync persists across paints.
+            if !OUT_OF_BOUNDS_ROW_REPORTED_LIGATURES.swap(true, AtomicOrdering::Relaxed) {
+                let total_rows = grid.total_rows();
+                log::error!(
+                    "grid_renderer should not try to render an out-of-bounds row \
+                     (row_idx={row_idx} total_rows={total_rows} \
+                     start_row={start_row} end_row={end_row} \
+                     used_displayed_output_rows={used_displayed_output_rows} \
+                     use_ligature_rendering=true)"
+                );
+            }
             continue;
         };
 
