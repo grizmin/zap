@@ -431,22 +431,6 @@ pub fn init(app: &mut AppContext) {
         ]);
     }
 
-    app.register_fixed_bindings([
-        // Menu dispatch for the "Open File Picker" custom action.
-        FixedBinding::custom(
-            CustomAction::ToggleProjectExplorer,
-            WorkspaceAction::ToggleProjectExplorer,
-            BindingDescription::new(crate::t!(
-                "keybinding-desc-workspace-toggle-project-explorer"
-            ))
-            .with_custom_description(
-                bindings::MAC_MENUS_CONTEXT,
-                crate::t!("keybinding-desc-workspace-toggle-project-explorer-menu"),
-            ),
-            id!("Workspace") & id!(flags::SHOW_PROJECT_EXPLORER),
-        ),
-    ]);
-
     app.register_editable_bindings([
         EditableBinding::new(
             "workspace:show_theme_chooser",
@@ -748,7 +732,10 @@ pub fn init(app: &mut AppContext) {
             ),
             WorkspaceAction::ToggleProjectExplorer,
         )
-        .with_context_predicate(id!("Workspace") & id!(flags::SHOW_PROJECT_EXPLORER)),
+        .with_context_predicate(id!("Workspace") & id!(flags::SHOW_PROJECT_EXPLORER))
+        .with_mac_key_binding("ctrl-2")
+        .with_linux_or_windows_key_binding("ctrl-shift-2")
+        .with_custom_action(CustomAction::ToggleProjectExplorer),
         EditableBinding::new(
             OPEN_GLOBAL_SEARCH_BINDING_NAME,
             BindingDescription::new(crate::t!("keybinding-desc-workspace-open-global-search"))
