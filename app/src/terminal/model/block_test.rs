@@ -1476,3 +1476,42 @@ fn test_calculate_optimal_row_counts_very_narrow_terminal() {
     assert_eq!(top, 500);
     assert_eq!(bottom, 1000);
 }
+
+/// The rprompt render offset should honour the shell's own default
+/// right-prompt indent: 0 for Fish and PowerShell (terminal edge) and 1 for
+/// zsh and bash, falling back to 1 when no shell host is set.
+#[test]
+fn test_rprompt_render_offset_uses_shell_default_indent() {
+    let size = SizeInfo::new_without_font_metrics(1, 20);
+    let cell_width = size.cell_width_px.as_f32();
+
+    // (shell type, default right-prompt indent in cells)
+    let cases: [(Option<ShellType>, usize); 5] = [
+        (Some(ShellType::Fish), 0),
+        (Some(ShellType::PowerShell), 0),
+        (Some(ShellType::Zsh), 1),
+        (Some(ShellType::Bash), 1),
+        (None, 1),
+    ];
+
+    for (shell_type, indent) in cases {
+        let mut block = TestBlockBuilder::new().build();
+        if let Some(shell_type) = shell_type {
+            block.set_shell_host(ShellHost {
+                shell_type,
+                user: "test".into(),
+                hostname: "test".into(),
+            });
+        }
+
+        // The test block's rprompt grid is empty, so the x offset is exactly
+        // (prompt grid columns - shell default indent) cells.
+        let expected_x = (block.prompt_grid_columns() - indent) as f32 * cell_width;
+        let offset = block.rprompt_render_offset(&size);
+        assert_eq!(
+            offset.x(),
+            expected_x,
+            "rprompt x offset for {shell_type:?} should use the shell's default indent"
+        );
+    }
+}
