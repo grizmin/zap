@@ -1504,9 +1504,13 @@ fn test_rprompt_render_offset_uses_shell_default_indent() {
             });
         }
 
-        // The test block's rprompt grid is empty, so the x offset is exactly
-        // (prompt grid columns - shell default indent) cells.
-        let expected_x = (block.prompt_grid_columns() - indent) as f32 * cell_width;
+        // The offset is (prompt grid columns - shell default indent) cells, less the
+        // width the rprompt itself occupies. The builder's rprompt grid is not
+        // necessarily empty, so read its width rather than assuming zero.
+        let rprompt_width_cells = block.rprompt_grid.grid_storage().max_cursor_point.col;
+        let expected_x =
+            (block.prompt_grid_columns() - indent) as f32 * cell_width
+                - rprompt_width_cells as f32 * cell_width;
         let offset = block.rprompt_render_offset(&size);
         assert_eq!(
             offset.x(),
